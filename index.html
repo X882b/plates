@@ -83,6 +83,13 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px}
 .tag{font-size:11px;border:1px solid var(--edge);border-radius:4px;padding:2px 6px;color:var(--dim)}
 .tag.each{border-color:var(--yellow);color:var(--yellow)}
 .empty{text-align:center;color:var(--dim);padding:28px 12px}
+.dots{display:flex;gap:5px;margin-top:9px;align-items:center}
+.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--edge)}
+.dots i.f{background:var(--blue);border-color:var(--blue)}
+.dots.hit i.f{background:var(--green);border-color:var(--green)}
+.count{font-family:var(--num);font-weight:700;font-size:15px}
+.count.hit{color:var(--green)}
+.set em{font-style:normal;font-family:system-ui;font-weight:400;font-size:11px;color:var(--dim);margin-right:6px}
 .sets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .set{
   font-family:var(--num);font-weight:700;font-size:14px;background:var(--steel);
@@ -456,7 +463,7 @@ function renderToday(){
     <div class="row spread">
       <div>
         <h3>${r ? esc(r.name) : "No routine"}</h3>
-        <div class="muted">${s.sets.length} sets · ${fmt(vol)} ${S.settings.unit} moved</div>
+        <div class="muted">${r ? `<span class="count ${s.sets.length >= r.items.reduce((a,i)=>a+i.sets,0) && s.sets.length ? "hit" : ""}">${s.sets.length} of ${r.items.reduce((a,i)=>a+i.sets,0)}</span> sets` : `${s.sets.length} sets`} · ${fmt(vol)} ${S.settings.unit} moved</div>
       </div>
       <button class="pill" data-act="pickRoutine">${r ? "Change" : "Pick"}</button>
     </div>
@@ -483,17 +490,26 @@ function renderToday(){
     const plan = r ? r.items.find(i=>i.exercise===id) : null;
     const done = s.sets.filter(x=>x.ex===id);
     const last = lastTime(id, s.id);
+    const target = plan ? plan.sets : 0;
+    const hit = target && done.length >= target;
+    const counter = target
+      ? `<span class="count ${hit?"hit":""}">${done.length} of ${target}</span> sets${plan.reps ? " × "+plan.reps+" reps" : ""}`
+      : `<span class="count">${done.length}</span> set${done.length===1?"":"s"}`;
     h += `<div class="block" data-ex="${id}">
       <div class="row spread">
         <div class="grow">
           <h3>${esc(ex.name)}</h3>
-          <div class="muted">${plan ? plan.sets+" × "+plan.reps+" target · " : ""}${last ? "last: "+last : "first time"}</div>
+          <div class="muted">${counter}</div>
+          <div class="muted">${last ? "last time: "+last : "first time"}</div>
         </div>
         <span class="tag ${ex.mode==="each"?"each":""}">${ex.mode==="each"?"per hand":"both hands"}</span>
         ${done.length ? "" : `<button class="x" data-act="dropEx" data-id="${id}" aria-label="Remove from this day">✕</button>`}
       </div>
+      ${target ? `<div class="dots ${hit?"hit":""}">${
+        Array.from({length:Math.max(target,done.length)},(_,i)=>`<i class="${i<done.length?"f":""}"></i>`).join("")
+      }</div>` : ""}
       ${ex.mode === "each" ? sideForm(id) : bothForm(id)}
-      ${done.length ? `<div class="sets">${done.map(x=>setChip(x,ex)).join("")}</div>
+      ${done.length ? `<div class="sets">${done.map((x,i)=>setChip(x,ex,i+1)).join("")}</div>
         <div class="muted" style="margin-top:8px">Tap a set to edit or delete it.</div>` : ""}
     </div>`;
   });
@@ -530,22 +546,29 @@ function prefill(id){
   }
   return {w:"", reps:""};
 }
-function setChip(x, ex){
+function setChip(x, ex, n){
+  const i = `<em>${n}</em>`;
   if(x.side === "pair")
-    return `<button class="set l" data-act="unlog" data-sid="${x.id}">${fmt(x.w)}<span>×</span>${x.reps}<span> ×2 = </span>${fmt(volume(x))}</button>`;
+    return `<button class="set l" data-act="unlog" data-sid="${x.id}">${i}${fmt(x.w)}<span>×</span>${x.reps}<span> ×2 = </span>${fmt(volume(x))}</button>`;
   const cls = x.side === "L" ? "l" : x.side === "R" ? "r" : "";
   const tag = x.side === "both" ? "" : `<span>${x.side}</span> `;
-  return `<button class="set ${cls}" data-act="unlog" data-sid="${x.id}">${tag}${fmt(x.w)}<span>×</span>${x.reps}</button>`;
+  return `<button class="set ${cls}" data-act="unlog" data-sid="${x.id}">${i}${tag}${fmt(x.w)}<span>×</span>${x.reps}</button>`;
 }
 function lastTime(exId, skipId){
   for(let i=S.sessions.length-1;i>=0;i--){
     const s = S.sessions[i];
-    if(s.id === skipId) continue;
+    if(s.id === skipId || s.date > viewDate) continue;
     const sets = s.sets.filter(x=>x.ex===exId);
-    if(sets.length){
-      const best = Math.max(...sets.map(x=>x.w));
-      return pretty(s.date)+" · "+fmt(best)+S.settings.unit;
-    }
+    if(!sets.length) continue;
+    // collapse runs of identical sets: 50×12, 50×12, 50×12 becomes 50×12 ×3
+    const parts = [];
+    sets.forEach(x=>{
+      const label = fmt(x.w)+"×"+x.reps;
+      const tail = parts[parts.length-1];
+      if(tail && tail.label === label) tail.n++;
+      else parts.push({label, n:1});
+    });
+    return pretty(s.date)+" · " + parts.map(g=>g.label + (g.n>1 ? " ×"+g.n : "")).join(", ");
   }
   return null;
 }
