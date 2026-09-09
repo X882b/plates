@@ -38,3 +38,10 @@ self.addEventListener("fetch", e => {
         if (res && res.status === 200 && res.type === "basic") {
           const copy = res.clone();
           caches.open(VERSION).then(c => c.put(e.request, copy));
+        }
+        return res;
+      }).catch(() => hit);
+      return hit || live;
+    })
+  );
+});
