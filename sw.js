@@ -1,5 +1,5 @@
 // Bump this string every time you change index.html, or phones keep the old copy.
-const VERSION = "plates-v3";
+const VERSION = "plates-v4";
 
 const FILES = [
   "./",
