@@ -1,5 +1,5 @@
 // Bump this string every time you change index.html, or phones keep the old copy.
-const VERSION = "plates-v4";
+const VERSION = "plates-v5";
 
 const FILES = [
   "./",
@@ -38,10 +38,3 @@ self.addEventListener("fetch", e => {
         if (res && res.status === 200 && res.type === "basic") {
           const copy = res.clone();
           caches.open(VERSION).then(c => c.put(e.request, copy));
-        }
-        return res;
-      }).catch(() => hit);
-      return hit || live;
-    })
-  );
-});
