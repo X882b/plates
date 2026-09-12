@@ -722,6 +722,10 @@ function renderPlan(){
           <div class="muted">${r.items.length} exercise${r.items.length===1?"":"s"} · ${sets} sets · ${
             r.days.length ? r.days.map(d=>SHORT[d]).join(" ") : "no days set"}</div>
         </button>
+        ${S.routines.length > 1 ? `<span class="mvs">
+          <button class="mv" data-act="moveRoutine" data-id="${r.id}" data-v="-1" aria-label="Move up">▲</button>
+          <button class="mv" data-act="moveRoutine" data-id="${r.id}" data-v="1" aria-label="Move down">▼</button>
+        </span>` : ""}
         <button class="pill" data-act="editRoutine" data-id="${r.id}">Edit</button>
         <button class="chev ${open?"up":""}" data-act="foldRoutine" data-id="${r.id}"
           aria-label="${open?"Collapse":"Expand"} ${esc(r.name)}">▾</button>
@@ -1323,6 +1327,12 @@ document.body.addEventListener("click", e=>{
       wrap.querySelector(".pickbtn").classList.add("empty");
       wrap.querySelectorAll(".pickopts button").forEach(x=>x.classList.remove("sel"));
     }
+  }
+  else if(a === "moveRoutine"){
+    const i = S.routines.findIndex(x=>x.id === id), j = i + (+b.dataset.v);
+    if(i < 0 || j < 0 || j >= S.routines.length) return;
+    const t = S.routines[i]; S.routines[i] = S.routines[j]; S.routines[j] = t;
+    save(); render();
   }
   else if(a === "moveItem"){
     const items = harvestItems(JSON.parse(box.dataset.items));
