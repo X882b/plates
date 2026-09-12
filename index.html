@@ -138,8 +138,10 @@ svg{display:block;width:100%;overflow:visible}
 #timer.done .btn{background:#fff;color:var(--red)}
 
 /* sheet */
-.pickbtn{display:flex;justify-content:center;align-items:center}
-.pickbtn.empty span{color:var(--dim)}
+/* same box as every other .btn — specificity has to beat .btn.wide */
+.btn.pickbtn{display:block;width:100%;padding:12px 16px;line-height:1.45;text-align:center}
+.btn.pickbtn span{display:inline;font:inherit}
+.btn.pickbtn.empty span{color:var(--dim)}
 .pickopts{display:grid;gap:8px;margin-top:8px;max-height:46vh;overflow:auto}
 .pickopts[hidden]{display:none}
 .pickhead{
