@@ -286,6 +286,7 @@ let S = seed();
 let tab = "today";
 let viewDate = null;
 let folded = false;
+const openRoutines = new Set();
 let range = "month";
 let saveT = null;
 function save(){ clearTimeout(saveT); saveT = setTimeout(()=>store.save(S), 250); }
@@ -699,20 +700,25 @@ function renderPlan(){
     h += `<div class="empty">A routine is a named list of exercises tied to weekdays. Today picks it up automatically.</div>`;
   }
   S.routines.forEach(r=>{
+    const open = openRoutines.has(r.id);
+    const sets = r.items.reduce((a,i)=>a+i.sets, 0);
     h += `<div class="block">
       <div class="row spread">
-        <div class="grow">
+        <button class="grow plain" data-act="foldRoutine" data-id="${r.id}" style="text-align:left">
           <h3>${esc(r.name)}</h3>
-          <div class="muted">${r.days.length ? r.days.map(d=>SHORT[d]).join(" · ") : "no days set"}</div>
-        </div>
+          <div class="muted">${r.items.length} exercise${r.items.length===1?"":"s"} · ${sets} sets · ${
+            r.days.length ? r.days.map(d=>SHORT[d]).join(" ") : "no days set"}</div>
+        </button>
         <button class="pill" data-act="editRoutine" data-id="${r.id}">Edit</button>
+        <button class="chev ${open?"up":""}" data-act="foldRoutine" data-id="${r.id}"
+          aria-label="${open?"Collapse":"Expand"} ${esc(r.name)}">▾</button>
       </div>
-      <div class="stack" style="margin-top:12px">
+      ${open ? `<div class="stack" style="margin-top:12px">
         ${r.items.map(i=>{
           const e = exById(i.exercise);
           return `<div class="row spread"><span>${e?esc(e.name):"—"}</span><span class="muted num">${i.sets} × ${i.reps}</span></div>`;
         }).join("") || `<div class="muted">No exercises yet</div>`}
-      </div>
+      </div>` : ""}
     </div>`;
   });
   h += `</div><div class="fabpad"></div>
@@ -1163,6 +1169,10 @@ document.body.addEventListener("click", e=>{
     save(); render();
   }
   else if(a === "fold"){ folded = !folded; render(); }
+  else if(a === "foldRoutine"){
+    openRoutines.has(id) ? openRoutines.delete(id) : openRoutines.add(id);
+    render();
+  }
   else if(a === "target") targetSheet(id);
   else if(a === "saveTarget"){
     const st = ensureSession(viewDate);
