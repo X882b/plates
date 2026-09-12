@@ -83,6 +83,9 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px}
 .tag{font-size:11px;border:1px solid var(--edge);border-radius:4px;padding:2px 6px;color:var(--dim)}
 .tag.each{border-color:var(--yellow);color:var(--yellow)}
 .empty{text-align:center;color:var(--dim);padding:28px 12px}
+.chev{font-size:13px;color:var(--dim);padding:8px 10px;line-height:1;transition:transform .15s}
+.chev.up{transform:rotate(180deg)}
+@media (prefers-reduced-motion:reduce){.chev{transition:none}}
 .flag{border-color:var(--yellow)}
 .flag h3{color:var(--yellow)}
 .dots{display:flex;gap:5px;margin-top:9px;align-items:center}
@@ -108,7 +111,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th{text-align:left;font-weight:500;color:var(--dim);font-size:12px;padding:0 0 6px}
 td{padding:8px 0;border-top:1px solid var(--edge)}
 td.n{font-family:var(--num);font-weight:700;text-align:right}
-.grid,.grid3{display:grid;gap:12px}
+.grid,.grid3{display:grid;gap:12px;margin-bottom:12px}
 .grid>.block,.grid3>.block{margin-bottom:0}
 .grid>.empty,.grid3>.empty{grid-column:1/-1}
 svg{display:block;width:100%;overflow:visible}
@@ -135,6 +138,10 @@ svg{display:block;width:100%;overflow:visible}
 .pickbtn{display:flex;justify-content:center;align-items:center}
 .pickopts{display:grid;gap:8px;margin-top:8px;max-height:46vh;overflow:auto}
 .pickopts[hidden]{display:none}
+.pickhead{
+  font-size:12px;color:var(--dim);padding:10px 2px 2px;
+  border-bottom:1px solid var(--edge);margin-bottom:2px;
+}
 .pickopts button.sel{border-color:var(--blue);box-shadow:inset 3px 0 0 var(--blue)}
 #sheet{position:fixed;inset:0;z-index:15;display:none;background:rgba(0,0,0,.6)}
 #sheet.on{display:block}
@@ -264,6 +271,7 @@ function seed(){
 let S = seed();
 let tab = "today";
 let viewDate = null;
+let folded = false;
 let range = "month";
 let saveT = null;
 function save(){ clearTimeout(saveT); saveT = setTimeout(()=>store.save(S), 250); }
@@ -504,13 +512,14 @@ function renderToday(){
 
   h += `<div class="block" style="margin:0">
     <div class="row spread">
-      <div>
+      <div class="grow">
         <h3>${r ? esc(r.name) : "No routine"}</h3>
         <div class="muted">${plannedTotal
           ? `<span class="count ${s.sets.length >= plannedTotal ? "hit" : ""}">${s.sets.length} of ${plannedTotal}</span> sets`
           : `${s.sets.length} sets`} · ${fmt(vol)} ${S.settings.unit} moved</div>
       </div>
       <button class="pill" data-act="pickRoutine">${r ? "Change" : "Pick"}</button>
+      <button class="chev ${folded?"up":""}" data-act="fold" aria-label="${folded?"Show":"Hide"} exercises">▾</button>
     </div>
   </div>`;
 
@@ -541,7 +550,7 @@ function renderToday(){
   }
 
   h += `<div class="grid">`;
-  ids.forEach(id=>{
+  (folded ? [] : ids).forEach(id=>{
     const ex = exById(id); if(!ex) return;
     const done = s.sets.filter(x=>x.ex===id);
     const last = lastTime(id, s.id);
@@ -571,10 +580,11 @@ function renderToday(){
     </div>`;
   });
 
+  if(folded && ids.length) h += `<div class="empty">${ids.length} exercise${ids.length===1?"":"s"} hidden</div>`;
   h += `</div><button class="btn ghost wide" data-act="addToday">Add an exercise to this day</button>`;
   if(s.sets.length){
     h += `<button class="btn ghost wide" data-act="clearDay" style="margin-top:10px;color:var(--red)">Delete this day's log</button>`;
-    if(s.start) h += `<div class="muted" style="text-align:center;margin-top:14px">Started ${new Date(s.start).getHours()}:${pad(new Date(s.start).getMinutes())}</div>`;
+    if(s.start) h += `<div class="muted" style="text-align:center;margin:20px 0 8px">Started ${new Date(s.start).getHours()}:${pad(new Date(s.start).getMinutes())}</div>`;
   }
 
   view.innerHTML = h;
@@ -673,7 +683,7 @@ function renderLib(){
   SUB.textContent = S.exercises.length+" in your library";
   let h = `<div class="grid">`;
   GROUPS.forEach(g=>{
-    const list = S.exercises.filter(e=>e.group===g);
+    const list = S.exercises.filter(e=>e.group===g).sort(byName);
     if(!list.length) return;
     h += `<div class="block"><h3 style="margin-bottom:10px">${g}</h3><div class="stack">`;
     list.forEach(e=>{
@@ -862,14 +872,18 @@ function closeSheet(){ sheet.classList.remove("on"); box.innerHTML = ""; }
 sheet.addEventListener("click", e=>{ if(e.target === sheet) closeSheet(); });
 
 function picker(pid, options, value, label){
-  const cur = options.find(o=>o.v === value) || options[0] || {v:"", t:"Nothing to pick"};
+  const pickable = options.filter(o=>!o.header);
+  const cur = pickable.find(o=>o.v === value) || pickable[0] || {v:"", t:"Nothing to pick"};
   return `<div data-picker="${pid}" data-val="${cur.v}">
     <label>${label}</label>
     <button class="btn ghost wide pickbtn" data-act="openPick" data-p="${pid}">
       <span>${esc(cur.t)}</span>
     </button>
     <div class="pickopts" hidden>
-      ${options.map(o=>`<button class="btn ghost wide ${o.v===cur.v?"sel":""}" data-act="pick" data-p="${pid}" data-v="${o.v}">${esc(o.t)}</button>`).join("")}
+      ${options.map(o=>o.header
+        ? `<div class="pickhead">${esc(o.header)}</div>`
+        : `<button class="btn ghost wide ${o.v===cur.v?"sel":""}" data-act="pick" data-p="${pid}" data-v="${o.v}">${esc(o.t)}</button>`
+      ).join("")}
     </div>
   </div>`;
 }
@@ -877,7 +891,18 @@ function pickVal(pid){
   const el = box.querySelector(`[data-picker="${pid}"]`);
   return el ? el.dataset.val : "";
 }
-const exOptions = () => S.exercises.map(e=>({v:e.id, t:e.name}));
+const byName = (a,b) => a.name.localeCompare(b.name);
+// Flat list broken up by muscle group, so long libraries stay findable.
+function exOptions(){
+  const out = [];
+  GROUPS.forEach(g=>{
+    const list = S.exercises.filter(e=>e.group===g).sort(byName);
+    if(!list.length) return;
+    out.push({header:g});
+    list.forEach(e=>out.push({v:e.id, t:e.name}));
+  });
+  return out;
+}
 
 function targetSheet(id){
   const ex = exById(id); if(!ex) return;
@@ -1003,9 +1028,14 @@ function pickRoutineSheet(){
   </div>`);
 }
 function addTodaySheet(){
-  openSheet(`<h2>Add to today</h2><div class="stack">
-    ${S.exercises.map(e=>`<button class="btn ghost wide" data-act="pushEx" data-id="${e.id}">${esc(e.name)}</button>`).join("")}
-  </div>`);
+  const rows = GROUPS.map(g=>{
+    const list = S.exercises.filter(e=>e.group===g).sort(byName);
+    if(!list.length) return "";
+    return `<div class="pickhead">${g}</div>` +
+      list.map(e=>`<button class="btn ghost wide" data-act="pushEx" data-id="${e.id}">${esc(e.name)}</button>`).join("");
+  }).join("");
+  openSheet(`<h2>Add to ${viewDate === today() ? "today" : pretty(viewDate)}</h2>
+    <div class="stack">${rows || `<div class="muted">No exercises in your library yet.</div>`}</div>`);
 }
 
 /* ---------- actions ---------- */
@@ -1069,6 +1099,7 @@ document.body.addEventListener("click", e=>{
     S.weights.sort((x,y)=>x.date < y.date ? -1 : 1);
     save(); render();
   }
+  else if(a === "fold"){ folded = !folded; render(); }
   else if(a === "target") targetSheet(id);
   else if(a === "saveTarget"){
     const st = ensureSession(viewDate);
