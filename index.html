@@ -86,6 +86,8 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px}
 .empty{text-align:center;color:var(--dim);padding:28px 12px}
 .plain{font:inherit;color:inherit;padding:0;text-align:left}
 .note{font-style:italic;margin-top:2px}
+.mvs{display:flex;flex-direction:column;gap:1px}
+.mv{color:var(--dim);font-size:10px;line-height:1;padding:5px 7px}
 .chev{font-size:13px;color:var(--dim);padding:8px 10px;line-height:1;transition:transform .15s}
 .chev.up{transform:rotate(180deg)}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
@@ -488,12 +490,17 @@ function render(){
 /* --- Today --- */
 // Compare the day as it stands against the routine it came from.
 // The day as it stands, expressed as routine items.
+function orderIds(s, ids){
+  if(!s.order || !s.order.length) return ids;
+  const pos = id => { const i = s.order.indexOf(id); return i < 0 ? 1e6 + ids.indexOf(id) : i; };
+  return ids.slice().sort((a,b)=>pos(a)-pos(b));
+}
 function dayItems(s, r){
   const ids = [];
   if(r) r.items.forEach(i=>{ if(!(s.skip||[]).includes(i.exercise)) ids.push(i.exercise); });
   (s.extra||[]).forEach(id=>{ if(!ids.includes(id) && !(s.skip||[]).includes(id)) ids.push(id); });
   s.sets.forEach(x=>{ if(!ids.includes(x.ex)) ids.push(x.ex); });
-  return ids.map(id=>{
+  return orderIds(s, ids).map(id=>{
     const t = (s.targets && s.targets[id]) || (r ? r.items.find(i=>i.exercise===id) : null);
     const done = s.sets.filter(x=>x.ex===id);
     return {
@@ -535,6 +542,8 @@ function renderToday(){
   if(r) r.items.forEach(i=>{ if(!ids.includes(i.exercise) && !skip.includes(i.exercise)) ids.push(i.exercise); });
   (s.extra||[]).forEach(id=>{ if(!ids.includes(id) && !skip.includes(id)) ids.push(id); });
   s.sets.forEach(x=>{ if(!ids.includes(x.ex)) ids.push(x.ex); });
+
+  orderIds(s, ids).forEach((id,i)=>{ ids[i] = id; });
 
   const targetFor = id => (s.targets && s.targets[id])
     || (r ? r.items.find(i=>i.exercise===id) : null) || null;
@@ -612,6 +621,10 @@ function renderToday(){
           ${ex.note ? `<div class="muted note">${esc(ex.note)}</div>` : ""}
         </div>
         <span class="tag ${ex.mode==="each"?"each":""}">${ex.mode==="each"?"per hand":"both hands"}</span>
+        ${ids.length > 1 ? `<span class="mvs">
+          <button class="mv" data-act="moveEx" data-id="${id}" data-v="-1" aria-label="Move up">▲</button>
+          <button class="mv" data-act="moveEx" data-id="${id}" data-v="1" aria-label="Move down">▼</button>
+        </span>` : ""}
         ${done.length ? "" : `<button class="x" data-act="dropEx" data-id="${id}" aria-label="Remove from this day">✕</button>`}
       </div>
       ${target ? `<div class="dots ${hit?"hit":""}">${
@@ -1063,7 +1076,12 @@ function harvestItems(items){
 }
 function routineRow(i, ix){
   const e = exById(i.exercise);
-  return `<div class="row spread"><span class="grow">${e?esc(e.name):"—"}</span>
+  return `<div class="row spread">
+    <span class="mvs">
+      <button class="mv" data-act="moveItem" data-v="${ix}" data-d="-1" aria-label="Move up">▲</button>
+      <button class="mv" data-act="moveItem" data-v="${ix}" data-d="1" aria-label="Move down">▼</button>
+    </span>
+    <span class="grow">${e?esc(e.name):"—"}</span>
     <input type="number" inputmode="numeric" style="width:56px" data-item="${ix}" data-k="sets" value="${i.sets}">
     <span class="muted">×</span>
     <input type="number" inputmode="numeric" style="width:56px" data-item="${ix}" data-k="reps" value="${i.reps}">
@@ -1154,6 +1172,15 @@ document.body.addEventListener("click", e=>{
       S.sessions = S.sessions.filter(x=>x.date !== viewDate);
       save(); render();
     }
+  }
+  else if(a === "moveEx"){
+    const st = ensureSession(viewDate);
+    const order = Array.from(view.querySelectorAll("[data-ex]")).map(el=>el.dataset.ex);
+    const i = order.indexOf(id), j = i + (+b.dataset.v);
+    if(i < 0 || j < 0 || j >= order.length) return;
+    order[i] = order[j]; order[j] = id;
+    st.order = order;
+    save(); render();
   }
   else if(a === "dropEx"){
     const s = ensureSession(viewDate);
@@ -1296,6 +1323,14 @@ document.body.addEventListener("click", e=>{
       wrap.querySelector(".pickbtn").classList.add("empty");
       wrap.querySelectorAll(".pickopts button").forEach(x=>x.classList.remove("sel"));
     }
+  }
+  else if(a === "moveItem"){
+    const items = harvestItems(JSON.parse(box.dataset.items));
+    const i = +b.dataset.v, j = i + (+b.dataset.d);
+    if(j < 0 || j >= items.length) return;
+    const t = items[i]; items[i] = items[j]; items[j] = t;
+    box.dataset.items = JSON.stringify(items);
+    document.getElementById("ritems").innerHTML = items.map((x,ix)=>routineRow(x,ix)).join("");
   }
   else if(a === "delItem"){
     const items = harvestItems(JSON.parse(box.dataset.items));
