@@ -139,6 +139,7 @@ svg{display:block;width:100%;overflow:visible}
 
 /* sheet */
 .pickbtn{display:flex;justify-content:center;align-items:center}
+.pickbtn.empty span{color:var(--dim)}
 .pickopts{display:grid;gap:8px;margin-top:8px;max-height:46vh;overflow:auto}
 .pickopts[hidden]{display:none}
 .pickhead{
@@ -151,8 +152,8 @@ svg{display:block;width:100%;overflow:visible}
 #sheetbox{
   position:absolute;left:0;right:0;bottom:0;background:var(--raised);
   border-top:1px solid var(--edge);border-radius:16px 16px 0 0;
-  padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);
-  max-height:88vh;overflow:auto;
+  padding:18px 16px calc(env(safe-area-inset-bottom) + 28px);
+  max-height:88vh;max-height:88dvh;overflow:auto;
 }
 #sheetbox h2{margin-bottom:14px}
 @media(prefers-reduced-motion:no-preference){
@@ -179,7 +180,7 @@ svg{display:block;width:100%;overflow:visible}
   .btn.wide{max-width:340px}
   #sheetbox{
     top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);
-    width:min(560px,90vw);max-height:82vh;border:1px solid var(--edge);border-radius:14px;padding:22px;
+    width:min(560px,90vw);max-height:82vh;max-height:82dvh;border:1px solid var(--edge);border-radius:14px;padding:22px;
   }
   #count{font-size:200px}
 }
@@ -903,12 +904,14 @@ function openSheet(html){ box.innerHTML = html; sheet.classList.add("on"); }
 function closeSheet(){ sheet.classList.remove("on"); box.innerHTML = ""; }
 sheet.addEventListener("click", e=>{ if(e.target === sheet) closeSheet(); });
 
-function picker(pid, options, value, label){
+function picker(pid, options, value, label, placeholder){
   const pickable = options.filter(o=>!o.header);
-  const cur = pickable.find(o=>o.v === value) || pickable[0] || {v:"", t:"Nothing to pick"};
+  const cur = pickable.find(o=>o.v === value)
+    || (placeholder ? {v:"", t:placeholder} : pickable[0])
+    || {v:"", t:"Nothing to pick"};
   return `<div data-picker="${pid}" data-val="${cur.v}">
     <label>${label}</label>
-    <button class="btn ghost wide pickbtn" data-act="openPick" data-p="${pid}">
+    <button class="btn ghost wide pickbtn ${cur.v ? "" : "empty"}" data-act="openPick" data-p="${pid}">
       <span>${esc(cur.t)}</span>
     </button>
     <div class="pickopts" hidden>
@@ -1023,7 +1026,7 @@ function routineSheet(id){
       <div><label>Exercises</label><div class="stack" id="ritems">
         ${r.items.map((i,ix)=>routineRow(i,ix)).join("") || `<div class="muted">None yet</div>`}
       </div></div>
-      ${picker("f-add", exOptions(), S.exercises.length ? S.exercises[0].id : "", "Add an exercise")}
+      ${picker("f-add", exOptions(), "", "Add an exercise", "Choose an exercise")}
       <button class="btn wide" data-act="addItem">Add to routine</button>
       <button class="btn wide" data-act="saveRoutine" data-id="${id||""}">Save routine</button>
       ${id?`<button class="btn ghost wide" data-act="delRoutine" data-id="${id}">Delete</button>`:""}
@@ -1195,6 +1198,7 @@ document.body.addEventListener("click", e=>{
     const wrap = box.querySelector(`[data-picker="${b.dataset.p}"]`);
     wrap.dataset.val = b.dataset.v;
     wrap.querySelector(".pickbtn span").textContent = b.textContent.trim();
+    wrap.querySelector(".pickbtn").classList.remove("empty");
     wrap.querySelectorAll(".pickopts button").forEach(x=>x.classList.toggle("sel", x === b));
     wrap.querySelector(".pickopts").hidden = true;
   }
@@ -1263,6 +1267,13 @@ document.body.addEventListener("click", e=>{
     items.push({exercise:pick, sets:4, reps:10});
     box.dataset.items = JSON.stringify(items);
     document.getElementById("ritems").innerHTML = items.map((i,ix)=>routineRow(i,ix)).join("");
+    const wrap = box.querySelector('[data-picker="f-add"]');
+    if(wrap){
+      wrap.dataset.val = "";
+      wrap.querySelector(".pickbtn span").textContent = "Choose an exercise";
+      wrap.querySelector(".pickbtn").classList.add("empty");
+      wrap.querySelectorAll(".pickopts button").forEach(x=>x.classList.remove("sel"));
+    }
   }
   else if(a === "delItem"){
     const items = harvestItems(JSON.parse(box.dataset.items));
