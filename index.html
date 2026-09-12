@@ -89,6 +89,12 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px}
 .chev{font-size:13px;color:var(--dim);padding:8px 10px;line-height:1;transition:transform .15s}
 .chev.up{transform:rotate(180deg)}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
+.fab{
+  position:fixed;left:16px;right:16px;z-index:7;
+  bottom:calc(env(safe-area-inset-bottom) + 80px);
+}
+.fab .btn{box-shadow:0 6px 22px rgba(0,0,0,.5)}
+.fabpad{height:70px}
 .flag{border-color:var(--yellow)}
 .flag h3{color:var(--yellow)}
 .dots{display:flex;gap:5px;margin-top:9px;align-items:center}
@@ -180,6 +186,8 @@ svg{display:block;width:100%;overflow:visible}
   .grid{grid-template-columns:1fr 1fr;align-items:start}
   .grid3{grid-template-columns:1fr 1fr 1fr;align-items:start}
   .btn.wide{max-width:340px}
+  .fab{left:auto;right:36px;bottom:28px;width:300px}
+  .fabpad{height:24px}
   #sheetbox{
     top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);
     width:min(560px,90vw);max-height:82vh;max-height:82dvh;border:1px solid var(--edge);border-radius:14px;padding:22px;
@@ -707,7 +715,8 @@ function renderPlan(){
       </div>
     </div>`;
   });
-  h += `</div><button class="btn wide" data-act="newRoutine">New routine</button>`;
+  h += `</div><div class="fabpad"></div>
+    <div class="fab"><button class="btn wide" data-act="newRoutine">New routine</button></div>`;
   view.innerHTML = h;
 }
 
@@ -730,7 +739,8 @@ function renderLib(){
     });
     h += `</div></div>`;
   });
-  h += `</div><button class="btn wide" data-act="newEx">Add exercise</button>`;
+  h += `</div><div class="fabpad"></div>
+    <div class="fab"><button class="btn wide" data-act="newEx">Add exercise</button></div>`;
   view.innerHTML = h;
 }
 
