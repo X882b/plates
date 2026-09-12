@@ -31,11 +31,12 @@ body{
 }
 button,input,select{font:inherit;color:inherit}
 button{background:none;border:none;cursor:pointer}
-input,select{
+input,select,textarea{
   background:var(--steel);border:1px solid var(--edge);border-radius:6px;
-  padding:10px;width:100%;
+  padding:10px;width:100%;resize:none;
 }
-input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
+textarea{font:inherit;line-height:1.4}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--yellow);outline-offset:2px}
 h2{font:600 20px/1.2 system-ui;margin:0 0 2px}
 h3{font:600 15px/1.2 system-ui;margin:0}
 .muted{color:var(--dim);font-size:13px}
@@ -83,6 +84,8 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:4px}
 .tag{font-size:11px;border:1px solid var(--edge);border-radius:4px;padding:2px 6px;color:var(--dim)}
 .tag.each{border-color:var(--yellow);color:var(--yellow)}
 .empty{text-align:center;color:var(--dim);padding:28px 12px}
+.plain{font:inherit;color:inherit;padding:0;text-align:left}
+.note{font-style:italic;margin-top:2px}
 .chev{font-size:13px;color:var(--dim);padding:8px 10px;line-height:1;transition:transform .15s}
 .chev.up{transform:rotate(180deg)}
 @media (prefers-reduced-motion:reduce){.chev{transition:none}}
@@ -295,6 +298,7 @@ function volume(set){ return set.side === "pair" ? set.w * set.reps * 2 : set.w 
 /* ---------- rest timer ---------- */
 const Timer = {
   ctx:null, nodes:[], endAt:0, live:false, raf:null, wake:null, dur:60,
+  alarmAt:0, fired:false, lastSync:0,
   el:document.getElementById("timer"),
   count:document.getElementById("count"),
   label:document.getElementById("tlabel"),
@@ -326,17 +330,32 @@ const Timer = {
   },
   schedule(secs){
     if(!this.ctx) return;
+    // The speaker lags the audio clock; aim early so the sound lands on zero.
+    const lat = Math.min(this.ctx.outputLatency || this.ctx.baseLatency || 0, 0.3);
     const t0 = this.ctx.currentTime;
-    if(S.settings.ticks && secs > 3){
-      for(let i=3;i>=1;i--) this.tone(t0 + secs - i, 620, 0.07, 0.18, "sine");
+    if(S.settings.ticks){
+      for(let i=3;i>=1;i--) if(secs - i > 0.05) this.tone(t0 + secs - i - lat, 620, 0.07, 0.18, "sine");
     }
-    const end = t0 + secs;
+    const end = t0 + Math.max(secs - lat, 0.02);
+    this.alarmAt = end;
+    this.fired = false;
     // the alarm: two runs of four hard beeps
     for(let r=0;r<2;r++){
       const base = end + r*1.35;
       for(let i=0;i<4;i++) this.tone(base + i*0.19, 990, 0.13, 0.55);
     }
     this.tone(end + 2.9, 660, 0.42, 0.45, "sawtooth");
+  },
+  // The audio clock and the wall clock drift apart when Android suspends audio.
+  // The wall clock is the truth, so re-schedule whenever they disagree.
+  resync(){
+    if(!this.live || !this.ctx || this.ctx.state !== "running") return;
+    const leftWall  = (this.endAt - Date.now()) / 1000;
+    const leftAudio = this.alarmAt - this.ctx.currentTime;
+    if(leftWall > 0.25 && Math.abs(leftAudio - leftWall) > 0.12){
+      this.clearAudio();
+      this.schedule(leftWall);
+    }
   },
   clearAudio(){
     this.nodes.forEach(n=>{ try{ n.stop(); }catch(e){} try{ n.disconnect(); }catch(e){} });
@@ -372,6 +391,8 @@ const Timer = {
     if(left > 0){
       this.count.textContent = Math.ceil(left);
       this.fill.style.width = (left/this.dur*100)+"%";
+      const now = Date.now();
+      if(now - (this.lastSync||0) > 400){ this.lastSync = now; this.resync(); }
       this.raf = requestAnimationFrame(()=>this.tick());
     }else{
       this.finish();
@@ -380,6 +401,11 @@ const Timer = {
   finish(){
     if(!this.live) return;
     this.live = false;
+    // Wall clock hit zero first: the queued alarm is late, so drop it and fire now.
+    if(this.ctx && !this.fired && this.ctx.currentTime < this.alarmAt - 0.05){
+      this.clearAudio();
+      this.schedule(0.03);
+    }
     this.count.textContent = "0";
     this.label.textContent = "Rest over — next set";
     this.el.classList.add("done");
@@ -402,8 +428,13 @@ document.getElementById("tbtns").addEventListener("click", e=>{
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState !== "visible") return;
   if(Timer.live){
-    if(Timer.ctx && Timer.ctx.state === "suspended") Timer.ctx.resume();
-    if(Date.now() >= Timer.endAt) Timer.finish(); else Timer.lockScreen();
+    if(Date.now() >= Timer.endAt){ Timer.finish(); return; }
+    Timer.lockScreen();
+    if(Timer.ctx && Timer.ctx.state === "suspended"){
+      Timer.ctx.resume().then(()=>Timer.resync()).catch(()=>{});
+    } else {
+      Timer.resync();
+    }
   }
 });
 
@@ -456,7 +487,7 @@ function dayItems(s, r){
     return {
       exercise: id,
       sets: t ? t.sets : (done.length || 4),
-      reps: t ? t.reps : (done.length ? done[done.length-1].reps : 8)
+      reps: t ? t.reps : (done.length ? done[done.length-1].reps : 10)
     };
   });
 }
@@ -558,16 +589,16 @@ function renderToday(){
     const target = tgt ? tgt.sets : 0;
     const hit = target && done.length >= target;
     const counter = target
-      ? `<span class="count ${hit?"hit":""}">${done.length} of ${target}</span> sets${tgt.reps ? " × "+tgt.reps+" reps" : ""}`
+      ? `<span class="count ${hit?"hit":""}">${done.length} of ${target}</span> sets`
       : `<span class="count">${done.length}</span> set${done.length===1?"":"s"}`;
     h += `<div class="block" data-ex="${id}">
       <div class="row spread">
         <div class="grow">
           <h3>${esc(ex.name)}</h3>
-          <div class="muted">${counter}</div>
+          <div class="muted"><button class="plain" data-act="target" data-id="${id}">${counter}</button></div>
           <div class="muted">${last ? "last time: "+last : "first time"}</div>
+          ${ex.note ? `<div class="muted note">${esc(ex.note)}</div>` : ""}
         </div>
-        <button class="pill tiny" data-act="target" data-id="${id}">${tgt ? tgt.sets+" × "+tgt.reps : "set target"}</button>
         <span class="tag ${ex.mode==="each"?"each":""}">${ex.mode==="each"?"per hand":"both hands"}</span>
         ${done.length ? "" : `<button class="x" data-act="dropEx" data-id="${id}" aria-label="Remove from this day">✕</button>`}
       </div>
@@ -627,7 +658,7 @@ function lastShape(exId){
     const sets = S.sessions[i].sets.filter(x=>x.ex===exId);
     if(sets.length) return {sets:sets.length, reps:sets[sets.length-1].reps};
   }
-  return {sets:4, reps:8};
+  return {sets:4, reps:10};
 }
 function lastTime(exId, skipId){
   for(let i=S.sessions.length-1;i>=0;i--){
@@ -688,7 +719,8 @@ function renderLib(){
     h += `<div class="block"><h3 style="margin-bottom:10px">${g}</h3><div class="stack">`;
     list.forEach(e=>{
       h += `<div class="row spread">
-        <button class="grow" style="text-align:left" data-act="editEx" data-id="${e.id}">${esc(e.name)}</button>
+        <button class="grow" style="text-align:left" data-act="editEx" data-id="${e.id}">${esc(e.name)}${
+          e.note ? `<div class="muted note">${esc(e.note)}</div>` : ""}</button>
         <span class="tag ${e.mode==="each"?"each":""}">${e.mode==="each"?"per hand":"both"}</span>
         <button class="x" data-act="delEx" data-id="${e.id}" aria-label="Delete ${esc(e.name)}">✕</button>
       </div>`;
@@ -908,7 +940,7 @@ function targetSheet(id){
   const ex = exById(id); if(!ex) return;
   const s = sessionFor(viewDate) || blankSession(viewDate);
   const r = s.routine ? S.routines.find(x=>x.id===s.routine) : routineForDate(viewDate);
-  const cur = (s.targets && s.targets[id]) || (r ? r.items.find(i=>i.exercise===id) : null) || {sets:4, reps:8};
+  const cur = (s.targets && s.targets[id]) || (r ? r.items.find(i=>i.exercise===id) : null) || {sets:4, reps:10};
   openSheet(`<h2>${esc(ex.name)}</h2>
     <div class="stack">
       <div class="muted">How many sets you plan to do today. This drives the counter and the dots.</div>
@@ -956,22 +988,29 @@ function setSheet(sid){
   box.dataset.side = x.side === "pair" ? "pair" : "both";
 }
 function exSheet(id){
-  const e = id ? exById(id) : {name:"", group:"Chest", mode:"both"};
+  const e = id ? exById(id) : {name:"", group:"Chest", mode:"both", note:""};
   openSheet(`<h2>${id?"Edit exercise":"New exercise"}</h2>
     <div class="stack">
       <div><label>Name</label><input id="f-name" value="${esc(e.name)}" placeholder="Cable fly"></div>
-      ${picker("f-group", GROUPS.map(g=>({v:g, t:g})), e.group, "Muscle group")}
+      <div><label>Muscle group</label>
+        <div class="row" style="gap:6px;flex-wrap:wrap">
+          ${GROUPS.map(g=>`<button class="pill ${g===e.group?"on":""}" data-act="group" data-v="${g}">${g}</button>`).join("")}
+        </div>
+      </div>
       <div><label>How you load it</label>
         <div class="row" style="gap:8px">
           <button class="pill ${e.mode==="both"?"on":""}" data-act="mode" data-v="both">Both hands</button>
           <button class="pill ${e.mode==="each"?"on":""}" data-act="mode" data-v="each">One hand at a time</button>
         </div>
-        <div class="muted" style="margin-top:6px">For per-hand exercises you enter the weight in one hand, and the total counts both — 12 kg × 10 reps lands as 240 kg.</div>
+      </div>
+      <div><label>Note</label>
+        <textarea id="f-note" rows="2" maxlength="140" placeholder="Seat 4, wide grip, pause at the bottom">${esc(e.note||"")}</textarea>
       </div>
       <button class="btn wide" data-act="saveEx" data-id="${id||""}">Save exercise</button>
-      ${id?`<button class="btn ghost wide" data-act="delEx" data-id="${id}">Delete</button>`:""}
+      ${id?`<button class="btn ghost wide" data-act="delEx" data-id="${id}" style="color:var(--red)">Delete</button>`:""}
     </div>`);
   box.dataset.mode = e.mode;
+  box.dataset.group = e.group;
 }
 function routineSheet(id){
   const r = id ? S.routines.find(x=>x.id===id) : {name:"", days:[], items:[]};
@@ -991,6 +1030,15 @@ function routineSheet(id){
     </div>`);
   box.dataset.days = JSON.stringify(r.days);
   box.dataset.items = JSON.stringify(r.items);
+}
+// Pull whatever is currently typed in the rows back into the working list,
+// so re-rendering the list never throws away edits.
+function harvestItems(items){
+  box.querySelectorAll("[data-item]").forEach(inp=>{
+    const it = items[+inp.dataset.item];
+    if(it) it[inp.dataset.k] = parseInt(inp.value) || 0;
+  });
+  return items;
 }
 function routineRow(i, ix){
   const e = exById(i.exercise);
@@ -1168,6 +1216,10 @@ document.body.addEventListener("click", e=>{
   }
   else if(a === "newEx") exSheet(null);
   else if(a === "editEx") exSheet(id);
+  else if(a === "group"){
+    box.dataset.group = b.dataset.v;
+    box.querySelectorAll('[data-act="group"]').forEach(x=>x.classList.toggle("on", x===b));
+  }
   else if(a === "mode"){
     box.dataset.mode = b.dataset.v;
     box.querySelectorAll('[data-act="mode"]').forEach(x=>x.classList.toggle("on", x===b));
@@ -1175,10 +1227,11 @@ document.body.addEventListener("click", e=>{
   else if(a === "saveEx"){
     const name = document.getElementById("f-name").value.trim();
     if(!name) return;
-    const group = pickVal("f-group") || "Other";
+    const group = box.dataset.group || "Other";
     const mode = box.dataset.mode;
-    if(id){ Object.assign(exById(id), {name, group, mode}); }
-    else S.exercises.push({id:uid(), name, group, mode});
+    const note = (document.getElementById("f-note").value || "").trim();
+    if(id){ Object.assign(exById(id), {name, group, mode, note}); }
+    else S.exercises.push({id:uid(), name, group, mode, note});
     save(); closeSheet(); render();
   }
   else if(a === "delEx"){
@@ -1205,14 +1258,14 @@ document.body.addEventListener("click", e=>{
     b.classList.toggle("on");
   }
   else if(a === "addItem"){
-    const items = JSON.parse(box.dataset.items);
+    const items = harvestItems(JSON.parse(box.dataset.items));
     const pick = pickVal("f-add"); if(!pick) return;
-    items.push({exercise:pick, sets:3, reps:8});
+    items.push({exercise:pick, sets:4, reps:10});
     box.dataset.items = JSON.stringify(items);
     document.getElementById("ritems").innerHTML = items.map((i,ix)=>routineRow(i,ix)).join("");
   }
   else if(a === "delItem"){
-    const items = JSON.parse(box.dataset.items);
+    const items = harvestItems(JSON.parse(box.dataset.items));
     items.splice(+b.dataset.v, 1);
     box.dataset.items = JSON.stringify(items);
     document.getElementById("ritems").innerHTML = items.map((i,ix)=>routineRow(i,ix)).join("") || `<div class="muted">None yet</div>`;
@@ -1220,10 +1273,7 @@ document.body.addEventListener("click", e=>{
   else if(a === "saveRoutine"){
     const name = document.getElementById("f-rname").value.trim() || "Routine";
     const days = JSON.parse(box.dataset.days);
-    const items = JSON.parse(box.dataset.items);
-    box.querySelectorAll("[data-item]").forEach(inp=>{
-      const it = items[+inp.dataset.item]; if(it) it[inp.dataset.k] = parseInt(inp.value)||0;
-    });
+    const items = harvestItems(JSON.parse(box.dataset.items));
     if(id) Object.assign(S.routines.find(x=>x.id===id), {name, days, items});
     else S.routines.push({id:uid(), name, days, items});
     save(); closeSheet(); render();
