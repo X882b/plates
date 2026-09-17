@@ -638,6 +638,10 @@ function renderToday(){
 
   if(folded && ids.length) h += `<div class="empty">${ids.length} exercise${ids.length===1?"":"s"} hidden</div>`;
   h += `</div><button class="btn ghost wide" data-act="addToday">Add an exercise to this day</button>`;
+  if(!r && ids.length){
+    h += `<button class="btn ghost wide" data-act="forkRoutine" style="margin-top:10px;color:var(--yellow)">
+      Save this day as a routine</button>`;
+  }
   if(s.sets.length){
     h += `<button class="btn ghost wide" data-act="clearDay" style="margin-top:10px;color:var(--red)">Delete this day's log</button>`;
     if(s.start) h += `<div class="muted" style="text-align:center;margin:20px 0 8px">Started ${new Date(s.start).getHours()}:${pad(new Date(s.start).getMinutes())}</div>`;
@@ -992,10 +996,14 @@ function targetSheet(id){
 }
 
 function forkSheet(){
-  openSheet(`<h2>Save as new routine</h2>
+  const s = sessionFor(viewDate) || blankSession(viewDate);
+  const from = S.routines.find(x=>x.id === s.routine) || routineForDate(viewDate);
+  const n = dayItems(s, from).length;
+  openSheet(`<h2>${from ? "Save as new routine" : "Save this day as a routine"}</h2>
     <div class="stack">
-      <div class="muted">Takes the exercises and targets exactly as they stand today.</div>
-      <div><label>Name</label><input id="f-fname" placeholder="Back, version 2"></div>
+      <div class="muted">Takes the ${n} exercise${n===1?"":"s"} and targets exactly as they stand${
+        from ? " today" : ", in the order you did them"}.</div>
+      <div><label>Name</label><input id="f-fname" placeholder="${from ? esc(from.name)+" v2" : "Push day"}"></div>
       <div><label>Days</label><div class="row" style="gap:6px;flex-wrap:wrap">
         ${SHORT.map((d,i)=>`<button class="pill" data-act="day" data-v="${i}">${d}</button>`).join("")}
       </div></div>
