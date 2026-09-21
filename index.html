@@ -453,6 +453,17 @@ document.addEventListener("visibilitychange", ()=>{
 });
 
 /* ---------- session helpers ---------- */
+const LIVE_MS = 3 * 60 * 60 * 1000;
+// A session carries on past midnight only from yesterday, and only if
+// sets were actually logged in it recently. Creation time doesn't count,
+// or back-filling an old day would look like live training.
+function isLive(s){
+  if(!s || !s.sets.length) return false;
+  const y = new Date(); y.setDate(y.getDate()-1);
+  if(s.date !== iso(y)) return false;
+  const last = s.sets.reduce((m,x)=>Math.max(m, x.t||0), 0);
+  return Date.now() - last < LIVE_MS;
+}
 function sessionFor(d){ return S.sessions.find(x=>x.date === d); }
 function blankSession(d){ return {id:null, date:d, start:null, routine:null, sets:[], extra:[], skip:[]}; }
 function ensureSession(d){
@@ -1152,12 +1163,13 @@ document.body.addEventListener("click", e=>{
     const reps = parseInt(wrap.querySelector('[data-f="reps"]').value) || 0;
     if(!reps) return;
     const s = ensureSession(viewDate);
+    // decide before logging: is this a session in progress, or old data being typed in?
+    const live = viewDate === today() || isLive(s);
     s.sets.push({id:uid(), ex:id, side:b.dataset.side, w, reps, t:Date.now()});
     save();
     const ex = exById(id);
     render();
-    // no rest timer when you're back-filling an old day
-    if(viewDate === today()) Timer.start(S.settings.rest, ex.name);
+    if(live) Timer.start(S.settings.rest, ex.name);
   }
   else if(a === "unlog") setSheet(b.dataset.sid);
   else if(a === "saveSet"){
@@ -1428,6 +1440,14 @@ if("serviceWorker" in navigator){
 (async function(){
   viewDate = today();
   const saved = await store.load();
+  if(saved){
+    const y = new Date(); y.setDate(y.getDate()-1);
+    const ys = (saved.sessions||[]).find(x=>x.date === iso(y));
+    if(ys && ys.sets && ys.sets.length && !(saved.sessions||[]).some(x=>x.date===today() && x.sets.length)){
+      const last = ys.sets.reduce((m,x)=>Math.max(m, x.t||0), 0);
+      if(Date.now() - last < LIVE_MS) viewDate = iso(y);
+    }
+  }
   if(saved) S = Object.assign(seed(), saved);
   render();
 })();
