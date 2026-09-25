@@ -5,7 +5,7 @@ step, no dependencies, no server. It runs offline and stores everything in the
 browser on the device that opens it.
 
 Live at `https://x882b.github.io/plates/` from the `main` branch of the
-`X882b/plates` repo, root folder. Current cache version: **plates-v17**.
+`X882b/plates` repo, root folder. Current cache version: **plates-v18**.
 
 Written by one person for their own gym use. Prefer small, direct changes to
 the existing file over refactors, frameworks or a build pipeline. The lack of
@@ -79,7 +79,7 @@ S = {
   exercises: [{ id, name, group, mode, note }],   // mode: "both" | "each"
   routines:  [{ id, name, days:[0-6], items:[{ exercise, sets, reps }] }],
   sessions:  [{ id, date:"YYYY-MM-DD", start, routine, sets:[], 
-                extra:[], skip:[], targets:{}, order:[] }],
+                extra:[], skip:[], targets:{}, order:[], kept }],
   weights:   [{ date, kg }],
   settings:  { rest, sound, ticks, vibrate, unit }
 }
@@ -93,6 +93,8 @@ is honest as it stands.
 Session fields beyond `sets` are per-day overrides of the routine:
 `extra` (exercises added that day), `skip` (routine exercises dropped),
 `targets` (per-day sets/reps overrides), `order` (per-day exercise order).
+`kept` is set by the ✕ on the "This day differs" box: it stores the
+divergence's key, so the box stays hidden until the day diverges differently.
 `dayItems()` collapses all of that back into routine items — it's what
 "Update routine" and "Save as new routine" both write.
 
