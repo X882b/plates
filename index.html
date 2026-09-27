@@ -780,7 +780,7 @@ function renderLib(){
       h += `<div class="row spread">
         <button class="grow" style="text-align:left" data-act="editEx" data-id="${e.id}">${esc(e.name)}${
           e.note ? `<div class="muted note">${esc(e.note)}</div>` : ""}</button>
-        ${e.mode==="each" ? `<span class="tag each">per side</span>` : ""}
+        <span class="tag ${e.mode==="each"?"each":""}">${e.mode==="each"?"per side":"both"}</span>
         <button class="x" data-act="delEx" data-id="${e.id}" aria-label="Delete ${esc(e.name)}">✕</button>
       </div>`;
     });
