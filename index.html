@@ -828,12 +828,14 @@ function renderStats(){
   for(let i=13;i>=0;i--){
     const d = iso(new Date(Date.now()-i*864e5));
     const s = S.sessions.find(x=>x.date===d);
-    days.push({d, v: s ? s.sets.reduce((a,x)=>a+volume(x),0) : 0});
+    const by = {};
+    if(s) s.sets.forEach(x=>{ const e = exById(x.ex); const g = e ? e.group : "Other"; by[g] = (by[g]||0) + volume(x); });
+    days.push({d, v: s ? s.sets.reduce((a,x)=>a+volume(x),0) : 0, by});
   }
   h += `<div class="block">
     <h3>Last two weeks</h3>
     <div class="muted" style="margin-bottom:10px">Weight moved per day</div>
-    ${bars(days.map(x=>x.v))}
+    ${bars(days)}
   </div>`;
 
   // per exercise
@@ -945,13 +947,39 @@ function line(vals){
     ${pts.map(p=>`<circle cx="${fmt(p[0])}" cy="${fmt(p[1])}" r="2.5" fill="var(--yellow)"/>`).join("")}
   </svg>`;
 }
-function bars(vals){
-  const max = Math.max(...vals, 1), w = 300, hh = 70, bw = w/vals.length;
+// One bar per day, stacked in zone colours. Segments follow the day's volume
+// split but never shrink below a readable sliver, so a small zone still shows.
+function bars(days){
+  const max = Math.max(...days.map(x=>x.v), 1), w = 300, hh = 70, bw = w/days.length, gap = 1;
   return `<svg viewBox="0 0 ${w} ${hh+14}" height="84" aria-hidden="true">
-    ${vals.map((v,i)=>{
-      const h2 = v/max*hh;
-      return `<rect x="${fmt(i*bw+2)}" y="${fmt(hh-h2)}" width="${fmt(bw-4)}" height="${fmt(Math.max(h2,1.5))}"
-        rx="2" fill="${v?"var(--blue)":"var(--edge)"}"/>`;
+    ${days.map((day,i)=>{
+      const x = fmt(i*bw+2), bwid = fmt(bw-4), h2 = Math.max(day.v/max*hh, 1.5);
+      if(!day.v) return `<rect x="${x}" y="${hh-1.5}" width="${bwid}" height="1.5" rx="2" fill="var(--edge)"/>`;
+      const zones = Object.keys(day.by).filter(g=>day.by[g] > 0)
+        .sort((a,b)=>(GROUPS.indexOf(a)+1||99)-(GROUPS.indexOf(b)+1||99));
+      const g = h2 > zones.length*6 ? gap : 0;   // no gaps on a stub of a bar
+      const room = h2 - g*(zones.length-1);
+      // zones too small to see get a fixed sliver; the rest share what's left
+      const minH = Math.min(5, room/zones.length);
+      const small = new Set();
+      for(let grew = true; grew;){
+        grew = false;
+        const big = zones.filter(z=>!small.has(z));
+        const bigVol = big.reduce((a,z)=>a+day.by[z],0);
+        const left = room - small.size*minH;
+        big.forEach(z=>{ if(day.by[z]/bigVol*left < minH){ small.add(z); grew = true; } });
+      }
+      const bigVol = zones.filter(z=>!small.has(z)).reduce((a,z)=>a+day.by[z],0);
+      const left = room - small.size*minH;
+      let y = hh, segs = "";
+      zones.forEach(z=>{
+        const sh = small.has(z) ? minH : day.by[z]/bigVol*left;
+        y -= sh;
+        segs += `<rect x="${x}" y="${fmt(y)}" width="${bwid}" height="${fmt(sh)}" fill="${ZONE_COLOR[z]||ZONE_COLOR.Other}"/>`;
+        y -= g;
+      });
+      return `<clipPath id="d14-${i}"><rect x="${x}" y="${fmt(hh-h2)}" width="${bwid}" height="${fmt(h2)}" rx="2"/></clipPath>
+        <g clip-path="url(#d14-${i})">${segs}</g>`;
     }).join("")}
   </svg>`;
 }
