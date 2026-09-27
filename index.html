@@ -640,7 +640,7 @@ function renderToday(){
           <div class="muted">${last ? "last time: "+last : "first time"}</div>
           ${ex.note ? `<div class="muted note">${esc(ex.note)}</div>` : ""}
         </div>
-        <span class="tag ${ex.mode==="each"?"each":""}">${ex.mode==="each"?"per hand":"both hands"}</span>
+        ${ex.mode==="each" ? `<span class="tag each">per side</span>` : ""}
         ${ids.length > 1 ? `<span class="mvs">
           <button class="mv" data-act="moveEx" data-id="${id}" data-v="-1" aria-label="Move up">▲</button>
           <button class="mv" data-act="moveEx" data-id="${id}" data-v="1" aria-label="Move down">▼</button>
@@ -680,7 +680,7 @@ function bothForm(id){
 function sideForm(id){
   const p = prefill(id);
   return `<div class="three" style="margin-top:12px">
-    <div><label>Weight per hand</label><input type="number" inputmode="decimal" step="0.5" data-f="w" data-id="${id}" value="${p.w}"></div>
+    <div><label>Weight per side</label><input type="number" inputmode="decimal" step="0.5" data-f="w" data-id="${id}" value="${p.w}"></div>
     <div><label>Reps</label><input type="number" inputmode="numeric" data-f="reps" data-id="${id}" value="${p.reps}"></div>
     <button class="btn" data-act="log" data-id="${id}" data-side="pair">Log</button>
   </div>`;
@@ -780,7 +780,7 @@ function renderLib(){
       h += `<div class="row spread">
         <button class="grow" style="text-align:left" data-act="editEx" data-id="${e.id}">${esc(e.name)}${
           e.note ? `<div class="muted note">${esc(e.note)}</div>` : ""}</button>
-        <span class="tag ${e.mode==="each"?"each":""}">${e.mode==="each"?"per hand":"both"}</span>
+        ${e.mode==="each" ? `<span class="tag each">per side</span>` : ""}
         <button class="x" data-act="delEx" data-id="${e.id}" aria-label="Delete ${esc(e.name)}">✕</button>
       </div>`;
     });
@@ -1073,7 +1073,7 @@ function setSheet(sid){
       <div><label>How this set counts</label>
         <div class="row" style="gap:8px;flex-wrap:wrap">
           <button class="pill ${x.side==="both"?"on":""}" data-act="countMode" data-v="both">Weight as entered</button>
-          <button class="pill ${x.side==="pair"?"on":""}" data-act="countMode" data-v="pair">Per hand, counts double</button>
+          <button class="pill ${x.side==="pair"?"on":""}" data-act="countMode" data-v="pair">Per side, counts double</button>
         </div>
       </div>
       <button class="btn wide" data-act="saveSet" data-sid="${sid}">Save changes</button>
@@ -1093,8 +1093,8 @@ function exSheet(id){
       </div>
       <div><label>How you load it</label>
         <div class="row" style="gap:8px">
-          <button class="pill ${e.mode==="both"?"on":""}" data-act="mode" data-v="both">Both hands</button>
-          <button class="pill ${e.mode==="each"?"on":""}" data-act="mode" data-v="each">One hand at a time</button>
+          <button class="pill ${e.mode==="both"?"on":""}" data-act="mode" data-v="both">Both</button>
+          <button class="pill ${e.mode==="each"?"on":""}" data-act="mode" data-v="each">One side at a time</button>
         </div>
       </div>
       <div><label>Note</label>
