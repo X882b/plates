@@ -5,7 +5,7 @@ step, no dependencies, no server. It runs offline and stores everything in the
 browser on the device that opens it.
 
 Live at `https://x882b.github.io/plates/` from the `main` branch of the
-`X882b/plates` repo, root folder. Current cache version: **plates-v21**.
+`X882b/plates` repo, root folder. Current cache version: **plates-v22**.
 
 Written by one person for their own gym use. Prefer small, direct changes to
 the existing file over refactors, frameworks or a build pipeline. The lack of

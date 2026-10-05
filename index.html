@@ -140,6 +140,14 @@ svg{display:block;width:100%;overflow:visible}
 #count{font-family:var(--num);font-weight:700;font-size:clamp(120px,44vw,220px);line-height:.85;letter-spacing:-.03em}
 #tlabel{color:var(--dim);font-size:15px;text-align:center}
 #timer.done #tlabel{color:#ffd9d6}
+#tsets{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:14px}
+#tsets:empty{display:none}
+#tsets .dots{margin:0;gap:8px;flex-wrap:wrap;justify-content:center}
+#tsets .dots i{width:14px;height:14px;border-width:2px}
+#tsets .tleft{font-size:15px;font-weight:600}
+#timer.done #tsets .dots i{border-color:rgba(255,255,255,.5)}
+#timer.done #tsets .dots i.f{background:#fff;border-color:#fff}
+#timer.done #tsets .tleft{color:#fff}
 #bar{height:5px;width:min(80%,340px);background:var(--edge);border-radius:3px;overflow:hidden;margin-top:18px}
 #bar i{display:block;height:100%;background:var(--blue);width:100%}
 #timer.done #bar{opacity:0}
@@ -229,6 +237,7 @@ svg{display:block;width:100%;overflow:visible}
 <div id="timer">
   <div id="count">60</div>
   <div id="tlabel"></div>
+  <div id="tsets"></div>
   <div id="bar"><i></i></div>
   <div id="tbtns">
     <button class="btn ghost" data-t="add">+30s</button>
@@ -318,6 +327,7 @@ const Timer = {
   el:document.getElementById("timer"),
   count:document.getElementById("count"),
   label:document.getElementById("tlabel"),
+  sets:document.getElementById("tsets"),
   fill:document.querySelector("#bar i"),
 
   unlock(){
@@ -382,7 +392,7 @@ const Timer = {
   },
   releaseScreen(){ try{ this.wake && this.wake.release(); }catch(e){} this.wake = null; },
 
-  start(secs, note){
+  start(secs, note, sets){
     this.unlock();
     this.clearAudio();
     this.dur = secs;
@@ -391,6 +401,7 @@ const Timer = {
     this.schedule(secs);
     this.lockScreen();
     this.label.textContent = note || "Rest";
+    this.sets.innerHTML = sets || "";
     this.el.classList.remove("done");
     this.el.classList.add("on");
     this.tick();
@@ -399,7 +410,7 @@ const Timer = {
     if(!this.live) return;
     const left = Math.max(0, this.endAt - Date.now())/1000;
     this.stop(true);
-    this.start(Math.round(left) + 30, this.label.textContent);
+    this.start(Math.round(left) + 30, this.label.textContent, this.sets.innerHTML);
   },
   tick(){
     cancelAnimationFrame(this.raf);
@@ -453,6 +464,22 @@ document.addEventListener("visibilitychange", ()=>{
     }
   }
 });
+
+// Where an exercise stands, for the rest screen: same dots as the card,
+// plus how many sets are left against the day's target.
+function setsProgress(s, id){
+  const r = s.routine ? S.routines.find(x=>x.id===s.routine) : routineForDate(s.date);
+  const t = (s.targets && s.targets[id]) || (r ? r.items.find(i=>i.exercise===id) : null);
+  const target = t ? t.sets : 0;
+  const done = s.sets.filter(x=>x.ex===id).length;
+  const plural = n => n + " set" + (n===1 ? "" : "s");
+  const text = !target ? plural(done) + " done"
+    : done < target ? plural(target-done) + " left"
+    : done === target ? "All " + plural(target) + " done"
+    : plural(done-target).replace("set", "extra set");
+  const dots = Array.from({length:Math.max(target, done)}, (_,i)=>`<i class="${i<done?"f":""}"></i>`).join("");
+  return `<div class="dots ${target && done>=target ? "hit" : ""}">${dots}</div><div class="tleft">${text}</div>`;
+}
 
 /* ---------- session helpers ---------- */
 const LIVE_MS = 3 * 60 * 60 * 1000;
@@ -1206,7 +1233,7 @@ document.body.addEventListener("click", e=>{
     save();
     const ex = exById(id);
     render();
-    if(live) Timer.start(S.settings.rest, ex.name);
+    if(live) Timer.start(S.settings.rest, ex.name, setsProgress(s, id));
   }
   else if(a === "unlog") setSheet(b.dataset.sid);
   else if(a === "saveSet"){
