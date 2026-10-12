@@ -151,8 +151,9 @@ svg{display:block;width:100%;overflow:visible}
 #bar{height:5px;width:min(80%,340px);background:var(--edge);border-radius:3px;overflow:hidden;margin-top:18px}
 #bar i{display:block;height:100%;background:var(--blue);width:100%}
 #timer.done #bar{opacity:0}
-#tbtns{display:flex;gap:10px;margin-top:26px}
+#tbtns{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:26px;width:min(80%,340px)}
 #tbtns .btn{min-width:104px}
+#tbtns .btn.again{width:100%}
 #timer.done .btn{background:#fff;color:var(--red)}
 
 /* sheet */
@@ -242,6 +243,7 @@ svg{display:block;width:100%;overflow:visible}
   <div id="tbtns">
     <button class="btn ghost" data-t="add">+30s</button>
     <button class="btn" data-t="stop">Done</button>
+    <button class="btn again" data-t="again" hidden></button>
   </div>
 </div>
 
@@ -329,6 +331,8 @@ const Timer = {
   label:document.getElementById("tlabel"),
   sets:document.getElementById("tsets"),
   fill:document.querySelector("#bar i"),
+  againBtn:document.querySelector('[data-t="again"]'),
+  again:null,   // {date, ex}: the exercise the red screen can log another set of
 
   unlock(){
     if(!this.ctx){
@@ -392,7 +396,7 @@ const Timer = {
   },
   releaseScreen(){ try{ this.wake && this.wake.release(); }catch(e){} this.wake = null; },
 
-  start(secs, note, sets){
+  start(secs, note, sets, again){
     this.unlock();
     this.clearAudio();
     this.dur = secs;
@@ -402,6 +406,8 @@ const Timer = {
     this.lockScreen();
     this.label.textContent = note || "Rest";
     this.sets.innerHTML = sets || "";
+    this.again = again || null;
+    this.againBtn.hidden = true;
     this.el.classList.remove("done");
     this.el.classList.add("on");
     this.tick();
@@ -410,7 +416,7 @@ const Timer = {
     if(!this.live) return;
     const left = Math.max(0, this.endAt - Date.now())/1000;
     this.stop(true);
-    this.start(Math.round(left) + 30, this.label.textContent, this.sets.innerHTML);
+    this.start(Math.round(left) + 30, this.label.textContent, this.sets.innerHTML, this.again);
   },
   tick(){
     cancelAnimationFrame(this.raf);
@@ -435,6 +441,8 @@ const Timer = {
     }
     this.count.textContent = "0";
     this.label.textContent = "Rest over — next set";
+    const next = this.again && nextSet(this.again);
+    if(next){ this.againBtn.textContent = next.label; this.againBtn.hidden = false; }
     this.el.classList.add("done");
     this.releaseScreen();
     if(S.settings.vibrate && navigator.vibrate) navigator.vibrate([320,140,320,140,650]);
@@ -449,7 +457,9 @@ const Timer = {
 };
 document.getElementById("tbtns").addEventListener("click", e=>{
   const b = e.target.closest("[data-t]"); if(!b) return;
-  if(b.dataset.t === "add") Timer.add(); else Timer.stop();
+  if(b.dataset.t === "add") Timer.add();
+  else if(b.dataset.t === "again") logAgain(Timer.again);
+  else Timer.stop();
 });
 // catch up if the phone slept through the end, and hold the wake lock
 document.addEventListener("visibilitychange", ()=>{
@@ -479,6 +489,26 @@ function setsProgress(s, id){
     : plural(done-target).replace("set", "extra set");
   const dots = Array.from({length:Math.max(target, done)}, (_,i)=>`<i class="${i<done?"f":""}"></i>`).join("");
   return `<div class="dots ${target && done>=target ? "hit" : ""}">${dots}</div><div class="tleft">${text}</div>`;
+}
+
+// The red screen's "Log set N" button: a copy of the last set of the same
+// exercise, offered only while the day's target isn't met yet.
+function nextSet(ag){
+  const s = sessionFor(ag.date); if(!s) return null;
+  const r = s.routine ? S.routines.find(x=>x.id===s.routine) : routineForDate(s.date);
+  const t = (s.targets && s.targets[ag.ex]) || (r ? r.items.find(i=>i.exercise===ag.ex) : null);
+  const done = s.sets.filter(x=>x.ex===ag.ex);
+  if(!t || !done.length || done.length >= t.sets) return null;
+  const last = done[done.length-1];
+  return {s, last, label: `Log set ${done.length+1} · ${fmt(last.w)}×${last.reps}`};
+}
+function logAgain(ag){
+  const next = ag && nextSet(ag); if(!next) return;
+  const {s, last} = next;
+  s.sets.push({id:uid(), ex:last.ex, side:last.side, w:last.w, reps:last.reps, t:Date.now()});
+  save(); render();
+  const ex = exById(last.ex);
+  Timer.start(S.settings.rest, ex ? ex.name : "Rest", setsProgress(s, last.ex), ag);
 }
 
 /* ---------- session helpers ---------- */
@@ -1233,7 +1263,7 @@ document.body.addEventListener("click", e=>{
     save();
     const ex = exById(id);
     render();
-    if(live) Timer.start(S.settings.rest, ex.name, setsProgress(s, id));
+    if(live) Timer.start(S.settings.rest, ex.name, setsProgress(s, id), {date:s.date, ex:id});
   }
   else if(a === "unlog") setSheet(b.dataset.sid);
   else if(a === "saveSet"){
